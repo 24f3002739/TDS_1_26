@@ -5,17 +5,16 @@ from typing import List
 
 app = FastAPI()
 
-# Enable CORS for POST requests from any origin
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["POST"],
-    allow_headers=["*"],
-)
+import os
+from pathlib import Path
+
+# Get the directory where this script is located
+BASE_DIR = Path(__file__).resolve().parent
 
 # Load the latency data
-with open("q-vercel-latency.json", "r") as f:
+with open(BASE_DIR / "q-vercel-latency.json", "r") as f:
     telemetry_data = json.load(f)
+
 
 @app.post("/")
 def analyze_latency(payload: dict):
