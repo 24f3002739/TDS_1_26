@@ -5,21 +5,28 @@ import statistics
 
 app = FastAPI()
 
-# CORS Configuration - MUST be configured before routes
+# CRITICAL: CORS must be configured BEFORE routes
+# allow_credentials MUST be False when using allow_origins=["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=False,  # Set to False when using "*"
-    allow_methods=["*"],  # Allow all methods including POST
-    allow_headers=["*"],  # Allow all headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Define the request body structure
 class AnalyticsRequest(BaseModel):
     regions: list[str]
     threshold_ms: float
 
-# Your data here (embed the JSON from q-vercel-latency.json)
+# TODO: Replace this empty list with your actual data from q-vercel-latency.json
+# Example format:
+# data = [
+#     {"region": "apac", "latency_ms": 145, "uptime_pct": 99.8},
+#     {"region": "apac", "latency_ms": 178, "uptime_pct": 99.1},
+#     {"region": "emea", "latency_ms": 188, "uptime_pct": 98.5},
+#     ... (all your records)
+# ]
 data = [
   {
     "region": "apac",
@@ -276,11 +283,8 @@ data = [
 ]
 
 @app.get("/")
-def read_root():
-    return {
-        "message": "Analytics endpoint is running. Send POST requests to this URL.",
-        "usage": "POST with JSON body: {\"regions\": [\"apac\", \"emea\"], \"threshold_ms\": 176}"
-    }
+def root():
+    return {"message": "POST to this endpoint with regions and threshold_ms"}
 
 @app.post("/")
 def analyze_latency(request: AnalyticsRequest):
@@ -291,14 +295,18 @@ def analyze_latency(request: AnalyticsRequest):
         
         if not region_data:
             continue
-            
+        
         latencies = [r["latency_ms"] for r in region_data]
         uptimes = [r["uptime_pct"] for r in region_data]
         
+        # Calculate metrics
         avg_latency = statistics.mean(latencies)
+        
+        # 95th percentile calculation
         sorted_latencies = sorted(latencies)
         p95_index = int(len(sorted_latencies) * 0.95)
-        p95_latency = sorted_latencies[p95_index] if sorted_latencies else 0
+        p95_latency = sorted_latencies[p95_index]
+        
         avg_uptime = statistics.mean(uptimes)
         breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
         
