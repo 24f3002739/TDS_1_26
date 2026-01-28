@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import json
 import statistics
 
 app = FastAPI()
@@ -10,7 +9,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST"],
+    allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
 
@@ -19,9 +18,22 @@ class AnalyticsRequest(BaseModel):
     regions: list[str]
     threshold_ms: float
 
-# Load the latency data
-with open("q-vercel-latency.json", "r") as f:
-    data = json.load(f)
+# IMPORTANT: Embed your JSON data here since Vercel can't read files
+# Replace this with your actual data from q-vercel-latency.json
+data = [
+    # Copy and paste your JSON array here
+    # Example:
+    # {"region": "apac", "latency_ms": 150, "uptime_pct": 99.5},
+    # {"region": "apac", "latency_ms": 180, "uptime_pct": 99.2},
+    # etc...
+]
+
+@app.get("/")
+def read_root():
+    return {
+        "message": "Analytics endpoint is running. Send POST requests to this URL.",
+        "usage": "POST with JSON body: {\"regions\": [\"apac\", \"emea\"], \"threshold_ms\": 176}"
+    }
 
 @app.post("/")
 def analyze_latency(request: AnalyticsRequest):
@@ -40,7 +52,10 @@ def analyze_latency(request: AnalyticsRequest):
         
         # Calculate metrics
         avg_latency = statistics.mean(latencies)
-        p95_latency = statistics.quantiles(latencies, n=20)[18]  # 95th percentile
+        # For 95th percentile, sort and get the value at 95% position
+        sorted_latencies = sorted(latencies)
+        p95_index = int(len(sorted_latencies) * 0.95)
+        p95_latency = sorted_latencies[p95_index]
         avg_uptime = statistics.mean(uptimes)
         breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
         
