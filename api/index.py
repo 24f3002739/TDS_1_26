@@ -1,50 +1,48 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
-from typing import List
+import statistics
 
 app = FastAPI()
 
-import os
-from pathlib import Path
+# Enable CORS for POST requests from any origin
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST"],
+    allow_headers=["*"],
+)
 
-# Get the directory where this script is located
-BASE_DIR = Path(__file__).resolve().parent
+# Define the request body structure
+class AnalyticsRequest(BaseModel):
+    regions: list[str]
+    threshold_ms: float
 
 # Load the latency data
-with open(BASE_DIR / "q-vercel-latency.json", "r") as f:
-    telemetry_data = json.load(f)
-
+with open("q-vercel-latency.json", "r") as f:
+    data = json.load(f)
 
 @app.post("/")
-def analyze_latency(payload: dict):
-    regions = payload.get("regions", [])
-    threshold_ms = payload.get("threshold_ms", 180)
-    
+def analyze_latency(request: AnalyticsRequest):
     results = {}
     
-    for region in regions:
+    for region in request.regions:
         # Filter records for this region
-        region_records = [r for r in telemetry_data if r["region"] == region]
+        region_data = [r for r in data if r.get("region") == region]
         
-        if not region_records:
+        if not region_data:
             continue
             
-        # Calculate average latency
-        latencies = [r["latency_ms"] for r in region_records]
-        avg_latency = sum(latencies) / len(latencies)
+        # Extract latencies and uptimes
+        latencies = [r["latency_ms"] for r in region_data]
+        uptimes = [r["uptime_pct"] for r in region_data]
         
-        # Calculate 95th percentile
-        sorted_latencies = sorted(latencies)
-        p95_index = int(len(sorted_latencies) * 0.95)
-        p95_latency = sorted_latencies[p95_index]
-        
-        # Calculate average uptime
-        uptimes = [r["uptime_pct"] for r in region_records]
-        avg_uptime = sum(uptimes) / len(uptimes)
-        
-        # Count breaches
-        breaches = sum(1 for lat in latencies if lat > threshold_ms)
+        # Calculate metrics
+        avg_latency = statistics.mean(latencies)
+        p95_latency = statistics.quantiles(latencies, n=20)[18]  # 95th percentile
+        avg_uptime = statistics.mean(uptimes)
+        breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
         
         results[region] = {
             "avg_latency": round(avg_latency, 2),
