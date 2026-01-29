@@ -1,17 +1,18 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import statistics
 
 app = FastAPI()
 
-# Simple CORS configuration
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600,
 )
 
 class AnalyticsRequest(BaseModel):
@@ -56,6 +57,31 @@ data = [
     {"region": "amer", "service": "support", "latency_ms": 186.52, "uptime_pct": 98.416, "timestamp": 20250311},
     {"region": "amer", "service": "checkout", "latency_ms": 132.63, "uptime_pct": 99.302, "timestamp": 20250312}
 ]
+
+# Middleware to add CORS headers to ALL responses
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    # Handle preflight
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Add CORS headers to response
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    return response
 
 @app.post("/api/latency")
 def analyze_latency(request: AnalyticsRequest):
