@@ -58,11 +58,34 @@ data = [
     {"region": "amer", "service": "checkout", "latency_ms": 132.63, "uptime_pct": 99.302, "timestamp": 20250312}
 ]
 
-def analyze_data(request: AnalyticsRequest):
-    """Core analytics logic"""
+# Root endpoint (for testing)
+@app.get("/")
+def root():
+    return {"message": "Analytics API is running", "redirect": "Use /api/latency for the endpoint"}
+
+# The actual endpoint at /api/latency
+@app.options("/api/latency")
+async def options_latency():
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.get("/api/latency")
+def get_latency():
+    return {"message": "POST to this endpoint with regions and threshold_ms"}
+
+@app.post("/api/latency")
+def post_latency(request: AnalyticsRequest):
     results = {}
+    
     for region in request.regions:
         region_data = [r for r in data if r.get("region") == region]
+        
         if not region_data:
             continue
         
@@ -82,42 +105,5 @@ def analyze_data(request: AnalyticsRequest):
             "avg_uptime": round(avg_uptime, 2),
             "breaches": breaches
         }
+    
     return results
-
-# Root path handlers
-@app.options("/")
-async def options_root():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "false",
-        }
-    )
-
-@app.get("/")
-def get_root():
-    return {"message": "Analytics API is running", "status": "ready"}
-
-@app.post("/")
-def post_root(request: AnalyticsRequest):
-    return analyze_data(request)
-
-# Also handle paths with trailing content (just in case)
-@app.options("/{path:path}")
-async def options_all(path: str):
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "false",
-        }
-    )
-
-@app.post("/{path:path}")
-def post_all(path: str, request: AnalyticsRequest):
-    return analyze_data(request)
