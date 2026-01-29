@@ -5,8 +5,7 @@ import statistics
 
 app = FastAPI()
 
-# CRITICAL: CORS must be configured BEFORE routes
-# allow_credentials MUST be False when using allow_origins=["*"]
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,14 +18,7 @@ class AnalyticsRequest(BaseModel):
     regions: list[str]
     threshold_ms: float
 
-# TODO: Replace this empty list with your actual data from q-vercel-latency.json
-# Example format:
-# data = [
-#     {"region": "apac", "latency_ms": 145, "uptime_pct": 99.8},
-#     {"region": "apac", "latency_ms": 178, "uptime_pct": 99.1},
-#     {"region": "emea", "latency_ms": 188, "uptime_pct": 98.5},
-#     ... (all your records)
-# ]
+# IMPORTANT: Add your actual data here from q-vercel-latency.json
 data = [
   {
     "region": "apac",
@@ -284,7 +276,7 @@ data = [
 
 @app.get("/")
 def root():
-    return {"message": "POST to this endpoint with regions and threshold_ms"}
+    return {"message": "Analytics API is running", "status": "ready"}
 
 @app.post("/")
 def analyze_latency(request: AnalyticsRequest):
@@ -299,14 +291,10 @@ def analyze_latency(request: AnalyticsRequest):
         latencies = [r["latency_ms"] for r in region_data]
         uptimes = [r["uptime_pct"] for r in region_data]
         
-        # Calculate metrics
         avg_latency = statistics.mean(latencies)
-        
-        # 95th percentile calculation
         sorted_latencies = sorted(latencies)
         p95_index = int(len(sorted_latencies) * 0.95)
         p95_latency = sorted_latencies[p95_index]
-        
         avg_uptime = statistics.mean(uptimes)
         breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
         
