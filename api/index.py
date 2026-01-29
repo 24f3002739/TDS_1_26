@@ -1,23 +1,6 @@
-from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from http.server import BaseHTTPRequestHandler
+import json
 import statistics
-
-app = FastAPI()
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    max_age=3600,
-)
-
-class AnalyticsRequest(BaseModel):
-    regions: list[str]
-    threshold_ms: float
 
 data = [
     {"region": "apac", "service": "recommendations", "latency_ms": 180.3, "uptime_pct": 97.193, "timestamp": 20250301},
@@ -58,50 +41,50 @@ data = [
     {"region": "amer", "service": "checkout", "latency_ms": 132.63, "uptime_pct": 99.302, "timestamp": 20250312}
 ]
 
-# Middleware to add CORS headers to ALL responses
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    # Handle preflight
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Max-Age": "3600",
+class handler(BaseHTTPRequestHandler):
+    def _set_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('Content-Type', 'application/json')
+    
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self._set_cors_headers()
+        self.end_headers()
+    
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length)
+        request_data = json.loads(body)
+        
+        regions = request_data.get('regions', [])
+        threshold_ms = request_data.get('threshold_ms', 0)
+        
+        results = {}
+        for region in regions:
+            region_data = [r for r in data if r.get('region') == region]
+            if not region_data:
+                continue
+            
+            latencies = [r['latency_ms'] for r in region_data]
+            uptimes = [r['uptime_pct'] for r in region_data]
+            
+            avg_latency = statistics.mean(latencies)
+            sorted_latencies = sorted(latencies)
+            p95_index = int(len(sorted_latencies) * 0.95)
+            p95_latency = sorted_latencies[p95_index]
+            avg_uptime = statistics.mean(uptimes)
+            breaches = sum(1 for lat in latencies if lat > threshold_ms)
+            
+            results[region] = {
+                'avg_latency': round(avg_latency, 2),
+                'p95_latency': round(p95_latency, 2),
+                'avg_uptime': round(avg_uptime, 2),
+                'breaches': breaches
             }
-        )
-    
-    # Process request
-    response = await call_next(request)
-    
-    # Add CORS headers to response
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    
-    return response
-
-@app.post("/api/latency")
-def analyze_latency(request: AnalyticsRequest):
-    results = {}
-    for region in request.regions:
-        region_data = [r for r in data if r.get("region") == region]
-        if not region_data:
-            continue
-        latencies = [r["latency_ms"] for r in region_data]
-        uptimes = [r["uptime_pct"] for r in region_data]
-        avg_latency = statistics.mean(latencies)
-        sorted_latencies = sorted(latencies)
-        p95_index = int(len(sorted_latencies) * 0.95)
-        p95_latency = sorted_latencies[p95_index]
-        avg_uptime = statistics.mean(uptimes)
-        breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
-        results[region] = {
-            "avg_latency": round(avg_latency, 2),
-            "p95_latency": round(p95_latency, 2),
-            "avg_uptime": round(avg_uptime, 2),
-            "breaches": breaches
-        }
-    return results
+        
+        self.send_response(200)
+        self._set_cors_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps(results).encode())
