@@ -1,11 +1,11 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import statistics
 
 app = FastAPI()
 
-# CORS middleware
+# Simple CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,7 +18,6 @@ class AnalyticsRequest(BaseModel):
     regions: list[str]
     threshold_ms: float
 
-# Data
 data = [
     {"region": "apac", "service": "recommendations", "latency_ms": 180.3, "uptime_pct": 97.193, "timestamp": 20250301},
     {"region": "apac", "service": "catalog", "latency_ms": 125.98, "uptime_pct": 98.59, "timestamp": 20250302},
@@ -58,52 +57,25 @@ data = [
     {"region": "amer", "service": "checkout", "latency_ms": 132.63, "uptime_pct": 99.302, "timestamp": 20250312}
 ]
 
-# Root endpoint (for testing)
-@app.get("/")
-def root():
-    return {"message": "Analytics API is running", "redirect": "Use /api/latency for the endpoint"}
-
-# The actual endpoint at /api/latency
-@app.options("/api/latency")
-async def options_latency():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
-@app.get("/api/latency")
-def get_latency():
-    return {"message": "POST to this endpoint with regions and threshold_ms"}
-
 @app.post("/api/latency")
-def post_latency(request: AnalyticsRequest):
+def analyze_latency(request: AnalyticsRequest):
     results = {}
-    
     for region in request.regions:
         region_data = [r for r in data if r.get("region") == region]
-        
         if not region_data:
             continue
-        
         latencies = [r["latency_ms"] for r in region_data]
         uptimes = [r["uptime_pct"] for r in region_data]
-        
         avg_latency = statistics.mean(latencies)
         sorted_latencies = sorted(latencies)
         p95_index = int(len(sorted_latencies) * 0.95)
         p95_latency = sorted_latencies[p95_index]
         avg_uptime = statistics.mean(uptimes)
         breaches = sum(1 for lat in latencies if lat > request.threshold_ms)
-        
         results[region] = {
             "avg_latency": round(avg_latency, 2),
             "p95_latency": round(p95_latency, 2),
             "avg_uptime": round(avg_uptime, 2),
             "breaches": breaches
         }
-    
     return results
