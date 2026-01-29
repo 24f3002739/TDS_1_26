@@ -5,7 +5,7 @@ import statistics
 
 app = FastAPI()
 
-# CORS middleware - this MUST come before route definitions
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,7 +18,7 @@ class AnalyticsRequest(BaseModel):
     regions: list[str]
     threshold_ms: float
 
-# Data from q-vercel-latency.json
+# Data
 data = [
     {"region": "apac", "service": "recommendations", "latency_ms": 180.3, "uptime_pct": 97.193, "timestamp": 20250301},
     {"region": "apac", "service": "catalog", "latency_ms": 125.98, "uptime_pct": 98.59, "timestamp": 20250302},
@@ -58,29 +58,11 @@ data = [
     {"region": "amer", "service": "checkout", "latency_ms": 132.63, "uptime_pct": 99.302, "timestamp": 20250312}
 ]
 
-# Explicit OPTIONS handler for CORS preflight
-@app.options("/")
-async def options_handler():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
-@app.get("/")
-def root():
-    return {"message": "Analytics API is running", "status": "ready"}
-
-@app.post("/")
-def analyze_latency(request: AnalyticsRequest):
+def analyze_data(request: AnalyticsRequest):
+    """Core analytics logic"""
     results = {}
-    
     for region in request.regions:
         region_data = [r for r in data if r.get("region") == region]
-        
         if not region_data:
             continue
         
@@ -100,5 +82,42 @@ def analyze_latency(request: AnalyticsRequest):
             "avg_uptime": round(avg_uptime, 2),
             "breaches": breaches
         }
-    
     return results
+
+# Root path handlers
+@app.options("/")
+async def options_root():
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "false",
+        }
+    )
+
+@app.get("/")
+def get_root():
+    return {"message": "Analytics API is running", "status": "ready"}
+
+@app.post("/")
+def post_root(request: AnalyticsRequest):
+    return analyze_data(request)
+
+# Also handle paths with trailing content (just in case)
+@app.options("/{path:path}")
+async def options_all(path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "false",
+        }
+    )
+
+@app.post("/{path:path}")
+def post_all(path: str, request: AnalyticsRequest):
+    return analyze_data(request)
